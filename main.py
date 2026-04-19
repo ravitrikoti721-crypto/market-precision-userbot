@@ -1,7 +1,7 @@
-import http.server, socketserver, threading, os
+import http.server, socketserver, threading, os, asyncio
 from pyrogram import Client, filters
 
-# Dummy Server
+# Dummy Server for Render
 def run_dummy_server():
     handler = http.server.SimpleHTTPRequestHandler
     try:
@@ -10,7 +10,7 @@ def run_dummy_server():
     except: pass
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
-# Configuration
+# Config
 API_ID = int(os.environ.get("API_ID"))
 API_HASH = os.environ.get("API_HASH")
 SESSION_STRING = os.environ.get("SESSION_STRING")
@@ -18,22 +18,26 @@ TARGET_CHAT_ID = int(os.environ.get("TARGET_CHAT_ID"))
 raw_sources = os.environ.get("SOURCE_CHAT_IDS", "")
 SOURCE_CHANNELS = [int(i.strip()) for i in raw_sources.split(",") if i.strip()]
 
-# V1.4.16 mein 'session_string' ki jagah sirf 'session_name' mein string jaati hai
-app = Client(session_name=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
+app = Client("mp_bot", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
 
 @app.on_message(filters.chat(SOURCE_CHANNELS))
-def forward_restricted(client, message):
+async def forward_restricted(client, message):
     try:
         text = message.text or message.caption or ""
         if message.photo:
-            client.send_photo(TARGET_CHAT_ID, message.photo.file_id, caption=text)
+            await client.send_photo(TARGET_CHAT_ID, message.photo.file_id, caption=text)
         elif message.video:
-            client.send_video(TARGET_CHAT_ID, message.video.file_id, caption=text)
+            await client.send_video(TARGET_CHAT_ID, message.video.file_id, caption=text)
         else:
-            client.send_message(TARGET_CHAT_ID, text)
-        print("Trade Copied Successfully!")
+            await client.send_message(TARGET_CHAT_ID, text)
+        print("Trade Copied!")
     except Exception as e:
         print(f"Error: {e}")
 
-print("Market Precision Master Forwarder is live...")
-app.run()
+async def start_bot():
+    await app.start()
+    print("Market Precision Master Forwarder is live...")
+    await asyncio.Event().wait()
+
+if __name__ == "__main__":
+    asyncio.run(start_bot())
