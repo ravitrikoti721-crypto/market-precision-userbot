@@ -19,20 +19,24 @@ SOURCES = [int(i.strip()) for i in raw_sources.split(",") if i.strip()]
 
 app = Client("mp_bot", session_string=SESSION, api_id=API_ID, api_hash=API_HASH)
 
-@app.on_message(filters.chat(SOURCES))
-async def forward_msg(client, message):
-    try:
-        text = message.text or message.caption or ""
-        if message.photo:
-            await client.send_photo(TARGET, message.photo.file_id, caption=text)
-        elif message.video:
-            await client.send_video(TARGET, message.video.file_id, caption=text)
-        else:
-            await client.send_message(TARGET, text)
-        print("Trade Copied!", flush=True)
-    except Exception as e:
-        print(f"Error: {e}", flush=True)
+@app.on_message()
+async def monitor_and_forward(client, message):
+    # 1. Ye line har message ki ID logs mein dikhayegi
+    print(f"MESSAGE DETECTED! From Chat ID: {message.chat.id}", flush=True)
 
+    # 2. Forwarding Logic (Sirf un chats se jo aapne Render par daali hain)
+    if message.chat.id in SOURCES:
+        try:
+            text = message.text or message.caption or ""
+            if message.photo:
+                await client.send_photo(TARGET, message.photo.file_id, caption=text)
+            elif message.video:
+                await client.send_video(TARGET, message.video.file_id, caption=text)
+            else:
+                await client.send_message(TARGET, text)
+            print("Trade Copied!", flush=True)
+        except Exception as e:
+            print(f"Forwarding Error: {e}", flush=True)
 async def main():
     print("--- BOT STARTING ---", flush=True)
     await app.start()
