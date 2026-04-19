@@ -1,39 +1,42 @@
-import http.server, socketserver, threading, os
+import os
+import threading
+import http.server
+import socketserver
 from pyrogram import Client, filters
 
-# Dummy Server for Render
-def run_dummy_server():
+# 1. Render dummy server to keep it alive
+def start_server():
     try:
-        handler = http.server.SimpleHTTPRequestHandler
-        with socketserver.TCPServer(("", 8080), handler) as httpd:
+        with socketserver.TCPServer(("", 8080), http.server.SimpleHTTPRequestHandler) as httpd:
             httpd.serve_forever()
     except: pass
 
-threading.Thread(target=run_dummy_server, daemon=True).start()
+threading.Thread(target=start_server, daemon=True).start()
 
-# Config
+# 2. Config from Environment Variables
 API_ID = int(os.environ.get("API_ID"))
 API_HASH = os.environ.get("API_HASH")
 SESSION = os.environ.get("SESSION_STRING")
 TARGET = int(os.environ.get("TARGET_CHAT_ID"))
-SOURCES = [int(i.strip()) for i in os.environ.get("SOURCE_CHAT_IDS").split(",") if i.strip()]
+# Multiple IDs support
+SOURCE_LIST = [int(i.strip()) for i in os.environ.get("SOURCE_CHAT_IDS").split(",") if i.strip()]
 
-# Version 1.4.16 syntax
+# 3. Client setup (V1 Syntax)
 app = Client(SESSION, api_id=API_ID, api_hash=API_HASH)
 
-@app.on_message(filters.chat(SOURCES))
-def forward_msg(client, message):
+@app.on_message(filters.chat(SOURCE_LIST))
+def forwarder(client, message):
     try:
-        text = message.text or message.caption or ""
-        if message.photo:
-            client.send_photo(TARGET, message.photo.file_id, caption=text)
+        # Copying content instead of forwarding to bypass restrictions
+        if message.text:
+            client.send_message(TARGET, message.text)
+        elif message.photo:
+            client.send_photo(TARGET, message.photo.file_id, caption=message.caption or "")
         elif message.video:
-            client.send_video(TARGET, message.video.file_id, caption=text)
-        else:
-            client.send_message(TARGET, text)
-        print("Success: Trade Copied")
+            client.send_video(TARGET, message.video.file_id, caption=message.caption or "")
+        print("Successfully Copied Trade!")
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"Copy Error: {e}")
 
-print("Market Precision Master Forwarder is live...")
+print("--- MARKET PRECISION BOT IS STARTING ---")
 app.run()
