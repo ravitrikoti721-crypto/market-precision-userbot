@@ -2,10 +2,9 @@ import http.server
 import socketserver
 import threading
 import os
-import asyncio
 from pyrogram import Client, filters
 
-# Dummy Server for Render
+# Dummy Server for Render (Port 8080)
 def run_dummy_server():
     handler = http.server.SimpleHTTPRequestHandler
     try:
@@ -15,7 +14,7 @@ def run_dummy_server():
 
 threading.Thread(target=run_dummy_server, daemon=True).start()
 
-# --- Config ---
+# --- Configuration ---
 API_ID = int(os.environ.get("API_ID"))
 API_HASH = os.environ.get("API_HASH")
 SESSION_STRING = os.environ.get("SESSION_STRING")
@@ -26,27 +25,21 @@ SOURCE_CHANNELS = [int(i.strip()) for i in raw_sources.split(",") if i.strip()]
 app = Client("mp_userbot", session_string=SESSION_STRING, api_id=API_ID, api_hash=API_HASH)
 
 @app.on_message(filters.chat(SOURCE_CHANNELS))
-async def forward_restricted(client, message):
+def forward_restricted(client, message):
     try:
         text = message.text or message.caption or ""
         # Brand cleaning
         text = text.replace("@OldChannel", "@marketprecision")
         
         if message.photo:
-            await client.send_photo(TARGET_CHAT_ID, message.photo.file_id, caption=text)
+            client.send_photo(TARGET_CHAT_ID, message.photo.file_id, caption=text)
         elif message.video:
-            await client.send_video(TARGET_CHAT_ID, message.video.file_id, caption=text)
+            client.send_video(TARGET_CHAT_ID, message.video.file_id, caption=text)
         else:
-            await client.send_message(TARGET_CHAT_ID, text)
+            client.send_message(TARGET_CHAT_ID, text)
         print("Trade Copied Successfully!")
     except Exception as e:
         print(f"Forwarding Error: {e}")
 
-async def main():
-    await app.start()
-    print("Market Precision Master Forwarder is live...")
-    await asyncio.Event().wait()
-
-if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+print("Market Precision Master Forwarder is live (V1.4.16)...")
+app.run()
