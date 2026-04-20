@@ -17,32 +17,36 @@ SOURCES = [int(i.strip()) for i in raw_sources.split(",") if i.strip()]
 
 app = Client("mp_bot", session_string=SESSION, api_id=API_ID, api_hash=API_HASH, workers=20)
 
-# 3. Targeted Handler (Sirf Source IDs ke liye)
-@app.on_message(filters.chat(SOURCES))
-async def copy_handler(client, message):
+# 3. Master Handler
+@app.on_message()
+async def main_handler(client, message):
     try:
-        print(f"!!! MATCH FOUND !!! From: {message.chat.title} ({message.chat.id})", flush=True)
-        # Seedha copy bina kisi complication ke
-        await message.copy(chat_id=TARGET)
-        print(f"--- SUCCESS: Copied to {TARGET} ---", flush=True)
+        chat_id = message.chat.id
+        # Ye line har message par log degi, chahe source ho ya na ho
+        print(f"--> RECEIVED: Message from {chat_id}", flush=True)
+
+        if chat_id in SOURCES:
+            print(f"!!! MATCH !!! Copying from {chat_id}...", flush=True)
+            await message.copy(chat_id=TARGET)
+            print(f"--- DONE: Copied to {TARGET} ---", flush=True)
     except Exception as e:
-        print(f"Copy Error: {e}", flush=True)
+        print(f"Error: {e}", flush=True)
 
 async def main():
     await app.start()
-    print(f"--- SYSTEM ONLINE ---", flush=True)
-    print(f"WATCHING ONLY: {SOURCES}", flush=True)
+    me = await app.get_me()
+    print(f"--- BOT ONLINE: Logged in as {me.first_name} ---", flush=True)
+    print(f"WATCHING: {SOURCES}", flush=True)
     
-    # Active check
+    # Force verification
     for s_id in SOURCES:
         try:
             chat = await app.get_chat(s_id)
-            print(f"✅ Monitoring: {chat.title}", flush=True)
+            print(f"✅ Verified: {chat.title}", flush=True)
         except:
-            print(f"❌ Cannot access: {s_id}", flush=True)
-            
+            print(f"❌ Failed to find: {s_id}", flush=True)
+
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    asyncio.run(main())
