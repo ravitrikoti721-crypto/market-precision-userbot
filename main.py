@@ -12,41 +12,35 @@ API_ID = int(os.environ.get("API_ID"))
 API_HASH = os.environ.get("API_HASH")
 SESSION = os.environ.get("SESSION_STRING")
 TARGET = int(str(os.environ.get("TARGET_CHAT_ID")).strip())
-
 raw_sources = os.environ.get("SOURCE_CHAT_IDS", "")
 SOURCES = [int(i.strip()) for i in raw_sources.split(",") if i.strip()]
 
-# Bot setup with heavy updates enabled
 app = Client("mp_bot", session_string=SESSION, api_id=API_ID, api_hash=API_HASH, workers=20)
 
-# 3. Master Logger - Ye har cheez print karega
-@app.on_message(filters.all)
-async def monitor_all(client, message):
-    chat_id = message.chat.id
-    print(f"--> [ANY MSG] From: {chat_id} | Name: {message.chat.title or 'Private'}", flush=True)
-
-    if chat_id in SOURCES:
-        try:
-            print(f"!!! MATCH FOUND !!! Copying from {chat_id}...", flush=True)
-            await message.copy(chat_id=TARGET)
-            print(f"--- SUCCESS: Copied to {TARGET} ---", flush=True)
-        except Exception as e:
-            print(f"Copy Error: {e}", flush=True)
+# 3. Targeted Handler (Sirf Source IDs ke liye)
+@app.on_message(filters.chat(SOURCES))
+async def copy_handler(client, message):
+    try:
+        print(f"!!! MATCH FOUND !!! From: {message.chat.title} ({message.chat.id})", flush=True)
+        # Seedha copy bina kisi complication ke
+        await message.copy(chat_id=TARGET)
+        print(f"--- SUCCESS: Copied to {TARGET} ---", flush=True)
+    except Exception as e:
+        print(f"Copy Error: {e}", flush=True)
 
 async def main():
     await app.start()
     print(f"--- SYSTEM ONLINE ---", flush=True)
-    print(f"WATCHING: {SOURCES}", flush=True)
-    print(f"TARGET: {TARGET}", flush=True)
+    print(f"WATCHING ONLY: {SOURCES}", flush=True)
     
-    # Verify Sources at start
+    # Active check
     for s_id in SOURCES:
         try:
             chat = await app.get_chat(s_id)
-            print(f"✅ Active Source: {chat.title}", flush=True)
+            print(f"✅ Monitoring: {chat.title}", flush=True)
         except:
-            print(f"❌ Source Not Found: {s_id}", flush=True)
-
+            print(f"❌ Cannot access: {s_id}", flush=True)
+            
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
