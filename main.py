@@ -1,7 +1,7 @@
 import http.server, socketserver, threading, os, asyncio
 from pyrogram import Client, filters
 
-# 1. Dummy Server
+# 1. Dummy Server for Render
 def run_dummy_server():
     with socketserver.TCPServer(("", 8080), http.server.SimpleHTTPRequestHandler) as httpd:
         httpd.serve_forever()
@@ -15,36 +15,36 @@ TARGET = int(str(os.environ.get("TARGET_CHAT_ID")).strip())
 raw_sources = os.environ.get("SOURCE_CHAT_IDS", "")
 SOURCES = [int(i.strip()) for i in raw_sources.split(",") if i.strip()]
 
-# Bot setup with extreme logging
+# Workers kam rakhe hain taaki stability bani rahe
 app = Client("mp_bot", session_string=SESSION, api_id=API_ID, api_hash=API_HASH, workers=5)
 
+# 3. Master Handler - Is baar filters.all hata diya hai, default pakdega
 @app.on_message()
-async def all_messages_handler(client, message):
-    # Ye line har halat mein print honi chahiye agar bot "sunn" raha hai
-    chat_name = message.chat.title or message.chat.first_name or "Unknown"
-    print(f"!!! EVENT DETECTED !!! From: {chat_name} ({message.chat.id})", flush=True)
+async def master_handler(client, message):
+    chat_id = message.chat.id
+    # Ye line har halat mein log dikhayegi
+    print(f"--> NEW EVENT: From {chat_id}", flush=True)
 
-    if message.chat.id in SOURCES:
+    if chat_id in SOURCES:
         try:
+            print(f"!!! SOURCE MATCH !!! Copying from {chat_id}...", flush=True)
             await message.copy(chat_id=TARGET)
-            print(f"✅ SUCCESS: Copied to {TARGET}", flush=True)
+            print(f"--- SUCCESS: Copied to {TARGET} ---", flush=True)
         except Exception as e:
-            print(f"❌ Copy Error: {e}", flush=True)
+            print(f"Copy Error: {e}", flush=True)
 
 async def main():
-    print("--- ATTEMPTING STARTUP ---", flush=True)
     await app.start()
     me = await app.get_me()
-    print(f"--- BOT ONLINE: {me.first_name} (@{me.username}) ---", flush=True)
+    print(f"--- SYSTEM READY: {me.first_name} ---", flush=True)
     
-    # Ye test karne ke liye ki bot khud ko message bhej sakta hai ya nahi
-    try:
-        await app.send_message("me", "Bot is now active and listening!")
-        print("--- STARTUP TEST SENT TO SAVED MESSAGES ---", flush=True)
-    except Exception as e:
-        print(f"--- STARTUP TEST FAILED: {e} ---", flush=True)
+    # Startup check
+    await app.send_message("me", "Listening for messages now...")
+    print("--- STARTUP TEST SENT ---", flush=True)
 
+    # Idle mode jo updates ko khichta rahega
     await asyncio.Event().wait()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(main())
