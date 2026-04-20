@@ -15,36 +15,34 @@ TARGET = int(str(os.environ.get("TARGET_CHAT_ID")).strip())
 raw_sources = os.environ.get("SOURCE_CHAT_IDS", "")
 SOURCES = [int(i.strip()) for i in raw_sources.split(",") if i.strip()]
 
-app = Client("mp_bot", session_string=SESSION, api_id=API_ID, api_hash=API_HASH, workers=20)
+# Bot setup with extreme logging
+app = Client("mp_bot", session_string=SESSION, api_id=API_ID, api_hash=API_HASH, workers=5)
 
-# 3. Master Handler
 @app.on_message()
-async def main_handler(client, message):
-    try:
-        chat_id = message.chat.id
-        # Ye line har message par log degi, chahe source ho ya na ho
-        print(f"--> RECEIVED: Message from {chat_id}", flush=True)
+async def all_messages_handler(client, message):
+    # Ye line har halat mein print honi chahiye agar bot "sunn" raha hai
+    chat_name = message.chat.title or message.chat.first_name or "Unknown"
+    print(f"!!! EVENT DETECTED !!! From: {chat_name} ({message.chat.id})", flush=True)
 
-        if chat_id in SOURCES:
-            print(f"!!! MATCH !!! Copying from {chat_id}...", flush=True)
+    if message.chat.id in SOURCES:
+        try:
             await message.copy(chat_id=TARGET)
-            print(f"--- DONE: Copied to {TARGET} ---", flush=True)
-    except Exception as e:
-        print(f"Error: {e}", flush=True)
+            print(f"✅ SUCCESS: Copied to {TARGET}", flush=True)
+        except Exception as e:
+            print(f"❌ Copy Error: {e}", flush=True)
 
 async def main():
+    print("--- ATTEMPTING STARTUP ---", flush=True)
     await app.start()
     me = await app.get_me()
-    print(f"--- BOT ONLINE: Logged in as {me.first_name} ---", flush=True)
-    print(f"WATCHING: {SOURCES}", flush=True)
+    print(f"--- BOT ONLINE: {me.first_name} (@{me.username}) ---", flush=True)
     
-    # Force verification
-    for s_id in SOURCES:
-        try:
-            chat = await app.get_chat(s_id)
-            print(f"✅ Verified: {chat.title}", flush=True)
-        except:
-            print(f"❌ Failed to find: {s_id}", flush=True)
+    # Ye test karne ke liye ki bot khud ko message bhej sakta hai ya nahi
+    try:
+        await app.send_message("me", "Bot is now active and listening!")
+        print("--- STARTUP TEST SENT TO SAVED MESSAGES ---", flush=True)
+    except Exception as e:
+        print(f"--- STARTUP TEST FAILED: {e} ---", flush=True)
 
     await asyncio.Event().wait()
 
