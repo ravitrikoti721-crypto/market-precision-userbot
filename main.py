@@ -2,7 +2,7 @@ import os, logging, asyncio, re, sqlite3, time
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 
-# 🆕 NEW: libraries needed to "read" text written inside images (OCR)
+# Libraries needed to "read" text written inside images (OCR)
 import pytesseract
 from PIL import Image
 
@@ -21,16 +21,12 @@ else:
     SOURCE_CHATS = [int(i.strip()) for i in os.getenv("SOURCE_PUBLIC_ID", "").split(",") if i.strip()]
     TARGET = -1001752144165
 
-# 🆕 NEW: Database now lives on the persistent disk mounted at /data,
-# so it survives restarts and deploys instead of being wiped every time.
-# Falls back to the old local path if /data doesn't exist yet (e.g. before the disk is attached).
 DB_FILE = "/data/bot_data.db" if os.path.isdir("/data") else "bot_data.db"
 
 # 🔥 HARD LOCK SYSTEM: Ek message ID ko ek baar mein ek hi baar process karne ke liye
 active_locks = set()
 
-# 🆕 NEW: Words to look for INSIDE images (screenshots). Add/remove words here anytime.
-# Keep everything in lowercase - the checker converts image text to lowercase before comparing.
+# Words to look for INSIDE images (screenshots). Add/remove words here anytime.
 OCR_BLOCKED_KEYWORDS = [
     "kapil verma",
     "sg options",
@@ -92,11 +88,19 @@ def clean_text(text):
     return text.strip()
 
 # --- UPDATED BLOCKING ---
+# 🆕 CHANGED: Instead of listing every promo domain by name (twitter.com, bit.ly, etc -
+# which breaks the moment someone posts a NEW domain like cosmofeed.com or revlu.in),
+# this now blocks ANY http:// or https:// link, any t.me/ link, and any wa.me/ link,
+# no matter what the domain is. This is future-proof against new domains being used.
 def is_blocked(msg):
     if msg.reply_to_msg_id and is_parent_blocked(msg.reply_to_msg_id): return True
 
     text = (msg.text or "").lower()
-    promo_patterns = r'(twitter\.com|x\.com|t\.co|youtube\.com|youtu\.be|openinapp\.co|tinyurl\.com|bit\.ly|wa\.me|\+91)'
+
+    # Catches ANY link starting with http:// or https:// (any domain whatsoever),
+    # plus Telegram invite links (t.me/...) and WhatsApp links (wa.me/...) even
+    # without the http prefix, plus bare +91 phone numbers.
+    promo_patterns = r'(https?://\S+|t\.me/\S+|wa\.me/\S+|\+91[\s\-]?\d{5,})'
     if re.search(promo_patterns, text): return True
 
     promo_kws = ["advisory", "limited seats", "kapil verma", "sg cash", "discount offer"]
@@ -107,8 +111,7 @@ def is_blocked(msg):
         if any(x in fwd_title for x in ["sg cash", "sebi", "kapil"]): return True
     return False
 
-# 🆕 NEW: Reads the text written INSIDE a photo and checks it against OCR_BLOCKED_KEYWORDS.
-# Only works on actual image files (screenshots/photos), not videos or PDFs.
+# Reads the text written INSIDE a photo and checks it against OCR_BLOCKED_KEYWORDS.
 def image_has_blocked_text(path):
     try:
         img = Image.open(path)
@@ -119,8 +122,6 @@ def image_has_blocked_text(path):
                 return True
         return False
     except Exception as e:
-        # If OCR itself fails for any reason, we do NOT block the image just because of that -
-        # we log the error and let the image through, so a broken OCR never silently kills your channel's mirroring.
         logging.error(f"OCR check failed (image was still allowed through): {e}")
         return False
 
@@ -128,20 +129,16 @@ def image_has_blocked_text(path):
 async def process_msg(msg, is_edit=False):
     if msg.chat_id not in SOURCE_CHATS: return
 
-    # 🔥 GLOBAL LOCK CHECK: Agar ye message ID abhi process ho rahi hai, toh turant drop karo
     if msg.id in active_locks:
         logging.info(f"🛡️ Duplicate network signal dropped for ID: {msg.id}")
         return
 
-    # Lock lagao
     active_locks.add(msg.id)
 
     downloaded_path = None
     try:
-        # DB check sabse pehle taaki lock ke andar confirmation ho sake
         tgt_id, last_text = get_mapping(msg.id)
 
-        # Agar NewMessage event hai par DB mein entry mil gayi, toh isko edit ghoshit karo
         if not is_edit and tgt_id is not None:
             is_edit = True
 
@@ -154,33 +151,28 @@ async def process_msg(msg, is_edit=False):
         if msg.reply_to_msg_id:
             reply_to, _ = get_mapping(msg.reply_to_msg_id)
 
-        # 🆕 NEW: If this message is a photo, download it first and OCR-check it
-        # BEFORE deciding whether to send. If it contains a blocked name/brand, we
-        # treat it exactly like a blocked text message (skip + remember it's blocked).
         if msg.media and msg.photo:
             downloaded_path = await client.download_media(msg)
             if downloaded_path and image_has_blocked_text(downloaded_path):
                 save_blocked(msg.id)
                 return
 
-        # 🎯 CASE 1: NAYA MESSAGE
+        # CASE 1: NAYA MESSAGE
         if tgt_id is None and not is_edit:
             if not text and not msg.media: return
 
             if msg.media:
-                # Reuse the download from the OCR step above if we already have it (photos),
-                # otherwise download now (videos, documents, etc).
                 path = downloaded_path or await client.download_media(msg)
                 sent = await client.send_file(TARGET, path, caption=text, reply_to=reply_to)
                 if path and os.path.exists(path): os.remove(path)
-                downloaded_path = None  # already cleaned up
+                downloaded_path = None
             else:
                 sent = await client.send_message(TARGET, text, link_preview=False, reply_to=reply_to)
 
             if sent:
                 save_mapping(msg.id, sent.id, text)
 
-        # 🎯 CASE 2: EDIT MESSAGE
+        # CASE 2: EDIT MESSAGE
         elif tgt_id is not None:
             last_text_str = last_text if last_text is not None else ""
             if last_text_str != text:
@@ -193,13 +185,11 @@ async def process_msg(msg, is_edit=False):
     except Exception as e:
         logging.error(f"Error in engine: {e}")
     finally:
-        # Clean up any leftover downloaded file (e.g. if it was blocked and never sent)
         if downloaded_path and os.path.exists(downloaded_path):
             try:
                 os.remove(downloaded_path)
             except Exception:
                 pass
-        # 🔥 Network lag handle karne ke liye lock ko 4 second baad hi kholenge
         await asyncio.sleep(4)
         active_locks.discard(msg.id)
 
@@ -223,7 +213,7 @@ async def delete_handler(event):
 
 async def main():
     await client.start()
-    logging.info("🚀 V90 OCR-BLOCKADE ONLINE")
+    logging.info("🚀 V91 LINK-BLOCKADE ONLINE")
     await client.run_until_disconnected()
 
 if __name__ == '__main__':
